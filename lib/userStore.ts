@@ -130,6 +130,14 @@ export async function createManagedUser(args: {
   const displayName = validateDisplayName(args.displayName || "", username);
   const { salt, hash } = hashManagedPassword(args.password);
 
+  const masterUsername = String(process.env.ADMIN_USERNAME || "")
+    .trim()
+    .toLowerCase();
+
+  if (masterUsername && username === masterUsername) {
+    throw new Error("This username is reserved for the master administrator.");
+  }
+
   const context = await readPrivateUsers();
   const duplicate = context.users.some(
     (entry) => entry.user.username.toLowerCase() === username
