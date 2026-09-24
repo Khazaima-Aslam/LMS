@@ -947,3 +947,154 @@ a {
   padding: 24px;
   line-height: 1.5;
 }
+
+
+.connectionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.connectionCard {
+  background: var(--surface);
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.connectionCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.connectionCard h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.connectionCard p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: 12px;
+}
+
+.connectionBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.connectionBadge.ready {
+  color: var(--green);
+  background: var(--green-bg);
+}
+
+.connectionBadge.missing {
+  color: var(--amber);
+  background: var(--amber-bg);
+}
+
+.connectionEmail {
+  margin-top: 7px !important;
+  overflow-wrap: anywhere;
+}
+
+.connectionForm {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.connectionSection {
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+  border: 1px solid #e1e8f0;
+  border-radius: 12px;
+  background: #fbfcfe;
+}
+
+.connectionSection h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.connectionSection label {
+  display: grid;
+  gap: 7px;
+  color: #26354a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.connectionSection input,
+.connectionSection textarea {
+  width: 100%;
+  border: 1px solid #cfd8e4;
+  border-radius: 8px;
+  padding: 10px 11px;
+  background: white;
+  color: var(--ink);
+  outline: none;
+}
+
+.connectionSection textarea {
+  resize: vertical;
+  min-height: 150px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.connectionSection input:focus,
+.connectionSection textarea:focus {
+  border-color: #5797ff;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, .1);
+}
+
+.connectionActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.privacyGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.privacyGrid > div {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fafcff;
+}
+
+.privacyGrid b {
+  font-size: 12px;
+}
+
+.privacyGrid span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 800px) {
+  .connectionGrid,
+  .privacyGrid {
+    grid-template-columns: 1fr;
+  }
+}
