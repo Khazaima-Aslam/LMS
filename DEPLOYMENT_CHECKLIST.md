@@ -1,0 +1,21 @@
+# Deployment checklist
+
+- [ ] Apify account created
+- [ ] Apify API token created
+- [ ] Google Cloud project created
+- [ ] Google Sheets API enabled
+- [ ] Service account created
+- [ ] JSON key created and stored privately
+- [ ] Blank Google Sheet created
+- [ ] Sheet shared as Editor with service-account `client_email`
+- [ ] Service-account JSON converted to Base64
+- [ ] GitHub repository created and project uploaded
+- [ ] Vercel project imported
+- [ ] Vercel environment variables added
+- [ ] Production deployment redeployed after env changes
+- [ ] Login works
+- [ ] Setup → Test Apify connection passes
+- [ ] Setup → Test Google Sheet connection passes
+- [ ] Search 3–5 test leads first
+- [ ] Confirm new rows appear in the `Leads` tab
+- [ ] Re-run the same search and confirm duplicates are not appended
