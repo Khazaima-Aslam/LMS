@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/auth";
+import { geocodeLocation } from "@/lib/geocode";
 
 export async function GET(request: Request) {
   if (!(await requireApiAuth())) {
@@ -8,41 +9,23 @@ export async function GET(request: Request) {
 
   const q = new URL(request.url).searchParams.get("q")?.trim();
   if (!q) {
-    return NextResponse.json({ error: "Location is required." }, { status: 400 });
-  }
-
-  const url =
-    "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=" +
-    encodeURIComponent(q);
-
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": process.env.GEOCODER_USER_AGENT || "LeadFlow/1.0",
-      "Accept-Language": "en",
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
     return NextResponse.json(
-      { error: "Location lookup service is unavailable." },
-      { status: 502 }
+      { error: "Enter a location name first." },
+      { status: 400 }
     );
   }
 
-  const results = (await response.json()) as Array<{
-    lat: string;
-    lon: string;
-    display_name: string;
-  }>;
+  const result = await geocodeLocation(q);
 
-  if (!results[0]) {
-    return NextResponse.json({ error: "Location not found." }, { status: 404 });
+  if (!result) {
+    return NextResponse.json(
+      {
+        error:
+          "I could not place that location on the map. Try a more specific value such as 'Jubail, Saudi Arabia'. You can still search using the location name.",
+      },
+      { status: 404 }
+    );
   }
 
-  return NextResponse.json({
-    latitude: Number(results[0].lat),
-    longitude: Number(results[0].lon),
-    displayName: results[0].display_name,
-  });
+  return NextResponse.json(result);
 }
