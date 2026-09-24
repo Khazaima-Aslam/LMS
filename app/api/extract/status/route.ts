@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/auth";
 import { getApifyRun, getApifyRunLeads } from "@/lib/apify";
 import { syncLeadsToGoogleSheet } from "@/lib/googleSheets";
-import { getSpreadsheetId } from "@/lib/config";
+import { getUserConnectionConfig } from "@/lib/connectionStore";
 
 const FAILED_STATUSES = new Set(["FAILED", "TIMED-OUT", "ABORTED"]);
 
 export async function GET(request: Request) {
-  if (!(await requireApiAuth())) {
+  const session = await requireApiAuth();
+  if (!session) {
     return NextResponse.json({ ok: false, error: "Unauthorized." }, { status: 401 });
   }
 
@@ -26,14 +27,31 @@ export async function GET(request: Request) {
   }
 
   try {
-    const run = await getApifyRun(runId);
+    const connection = await getUserConnectionConfig(session);
+    if (!connection) {
+      return NextResponse.json(
+        {
+          ok: false,
+          done: true,
+          error: "Your saved connection profile is missing.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const apifyConfig = {
+      token: connection.apifyToken,
+      actorId: connection.apifyActorId,
+    };
+
+    const run = await getApifyRun(runId, apifyConfig);
 
     if (FAILED_STATUSES.has(run.status)) {
       return NextResponse.json({
         ok: false,
         done: true,
         status: run.status,
-        error: run.statusMessage || `Apify run ended with status ${run.status}.`,
+        error: run.statusMessage || "Apify run ended with status " + run.status + ".",
       });
     }
 
@@ -46,18 +64,22 @@ export async function GET(request: Request) {
       });
     }
 
-    const leads = await getApifyRunLeads(runId, maxLeads);
-    const sync = await syncLeadsToGoogleSheet(leads);
-    const spreadsheetId = getSpreadsheetId();
+    const leads = await getApifyRunLeads(runId, maxLeads, apifyConfig);
+    const sync = await syncLeadsToGoogleSheet(leads, {
+      serviceAccountJson: connection.googleServiceAccountJson,
+      spreadsheetId: connection.googleSpreadsheetId,
+      tab: connection.googleSheetTab,
+    });
 
     return NextResponse.json({
       ok: true,
       done: true,
       status: run.status,
       ...sync,
-      sheetUrl: spreadsheetId
-        ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
-        : "",
+      sheetUrl:
+        "https://docs.google.com/spreadsheets/d/" +
+        connection.googleSpreadsheetId +
+        "/edit",
     });
   } catch (error) {
     console.error("Extraction status error:", error);
