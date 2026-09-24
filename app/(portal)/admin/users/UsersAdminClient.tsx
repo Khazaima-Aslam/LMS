@@ -245,7 +245,9 @@ export default function UsersAdminClient({
                   const selfManaged =
                     currentSource === "managed" &&
                     currentUsername.toLowerCase() === user.username.toLowerCase();
-                  const busy = working.includes(user.username);
+                  const busy =
+                    working === `update:${user.username}` ||
+                    working === `password:${user.username}`;
 
                   return (
                     <tr key={user.username}>

@@ -13,7 +13,13 @@
 - [ ] Vercel project imported
 - [ ] Vercel environment variables added
 - [ ] Production deployment redeployed after env changes
-- [ ] Login works
+- [ ] Master administrator login works
+- [ ] User Accounts page is visible for the master administrator
+- [ ] Create one test managed User account
+- [ ] Confirm the managed User can sign in but cannot open /admin/users
+- [ ] Create or promote one test Admin account and confirm User Accounts access
+- [ ] Confirm password reset works for a managed account
+- [ ] Confirm disabling a managed account prevents its next login
 - [ ] Setup → Test Apify connection passes
 - [ ] Setup → Test Google Sheet connection passes
 - [ ] Search 3–5 test leads first

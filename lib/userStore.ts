@@ -228,16 +228,21 @@ export async function authenticateManagedUser(
   usernameValue: string,
   password: string
 ) {
-  let context;
+  let username: string;
   try {
-    context = await findPrivateUser(usernameValue);
+    username = normalizeManagedUsername(usernameValue);
   } catch {
     return null;
   }
 
-  if (!context.found?.user.active) return null;
+  const context = await readPrivateUsers();
+  const found = context.users.find(
+    (entry) => entry.user.username.toLowerCase() === username
+  );
 
-  const user = context.found.user;
+  if (!found?.user.active) return null;
+
+  const user = found.user;
   const valid = verifyManagedPassword(
     password,
     user.passwordSalt,

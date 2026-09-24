@@ -5,6 +5,8 @@ This project is a private dashboard for extracting public business listings with
 ## Features
 
 - Password-protected dashboard
+- Master administrator plus admin-managed user accounts
+- Admin-only User Accounts dashboard for creating, disabling, promoting, and resetting accounts
 - Multiple business keywords
 - Location lookup with latitude/longitude
 - Radius selection: 1–50 km
@@ -51,6 +53,8 @@ This project is a private dashboard for extracting public business listings with
 10. Share the Sheet as **Editor** with the `client_email` shown inside the service-account JSON.
 
 The app automatically creates the `Leads` tab and headers if they do not exist.
+
+For managed portal accounts, LeadFlow also creates a hidden `_LeadFlowUsers` tab in the same spreadsheet. Passwords are stored only as salted scrypt hashes; plain passwords are never written to Google Sheets.
 
 ## 3. Convert the Google JSON key to Base64
 
@@ -107,6 +111,8 @@ On PowerShell, you can use:
 
 After adding/changing environment variables, redeploy the Vercel project.
 
+The `ADMIN_USERNAME` / `ADMIN_PASSWORD` account is the permanent **master administrator**. After signing in as the master admin, open **User Accounts** in the sidebar to create separate logins for other staff. Managed accounts can be assigned either **User** or **Admin** role, disabled/enabled, and have their passwords reset without changing Vercel environment variables.
+
 ## 5. Run locally
 
 ```bash
@@ -144,6 +150,16 @@ vercel --prod
 
 Then add the environment variables in the Vercel dashboard and redeploy.
 
+## User account management
+
+- The Vercel environment-variable login remains the master administrator.
+- Admin users see **User Accounts** in the left sidebar.
+- Managed accounts are stored in the hidden `_LeadFlowUsers` Google Sheet tab.
+- Usernames are normalized to lowercase and allow letters, numbers, dot, underscore, and hyphen.
+- Managed passwords must be at least 8 characters and are stored using a per-user random salt plus Node.js scrypt hashing.
+- Managed admins cannot deactivate themselves or remove their own admin role.
+- Normal users cannot access `/admin/users` or the admin user-management API.
+
 ## Search behavior
 
 - If valid latitude/longitude are present, the app sends a point-based custom geolocation plus `radiusKm` to Apify.
@@ -165,6 +181,9 @@ Create a new Apify API token and update `APIFY_TOKEN`.
 ### "Portal login is not configured"
 Add `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `AUTH_SECRET` in **Vercel → Project → Settings → Environment Variables**, apply them to Production, then redeploy.
 
+### Managed account sign-in is unavailable
+Confirm that the Google service-account credentials are configured, the spreadsheet ID is correct, and the spreadsheet is shared with the service-account email as **Editor**. Managed accounts depend on the same Google Sheet connection used for lead storage.
+
 ### Extraction is taking a long time
 This version starts the Apify run asynchronously and polls its status, so it is not tied to one long Vercel request. Keep the Search Leads page open until the app reports **Import completed**. Contact enrichment can still make Apify runs slower, so use a smaller batch if you need faster results.
 
@@ -173,7 +192,9 @@ Use a simpler value such as `Jubail, Saudi Arabia`, then click **Find**. You may
 
 ## Security notes
 
-- This app uses a signed, HTTP-only session cookie.
+- This app uses a signed, HTTP-only session cookie with role information.
+- User-management endpoints enforce admin authorization on the server.
+- Managed user passwords are stored only as salted scrypt hashes in the hidden `_LeadFlowUsers` tab.
 - Credentials never need to be stored in browser localStorage.
 - The Setup page shows configuration status, not secret values.
 - Rotate any API key or JSON key that is accidentally committed to GitHub or exposed publicly.
