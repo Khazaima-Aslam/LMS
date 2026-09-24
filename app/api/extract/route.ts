@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/auth";
-import { runApifySearch } from "@/lib/apify";
-import { syncLeadsToGoogleSheet } from "@/lib/googleSheets";
-import { getSpreadsheetId } from "@/lib/config";
-
-export const maxDuration = 300;
+import { startApifySearch } from "@/lib/apify";
 
 function numberWithin(value: unknown, min: number, max: number, fallback: number) {
   const n = Number(value);
@@ -53,38 +49,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const leads = await runApifySearch({
+    const maxLeads = Math.round(numberWithin(body.maxLeads, 1, 100, 25));
+
+    const run = await startApifySearch({
       keywords,
       location,
       latitude,
       longitude,
       radiusKm: numberWithin(body.radiusKm, 1, 50, 10),
-      maxLeads: Math.round(numberWithin(body.maxLeads, 1, 100, 25)),
+      maxLeads,
       enrich: Boolean(body.enrich),
     });
 
-    const sync = await syncLeadsToGoogleSheet(leads);
-    const spreadsheetId = getSpreadsheetId();
-
     return NextResponse.json({
       ok: true,
-      ...sync,
-      sheetUrl: spreadsheetId
-        ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
-        : "",
+      runId: run.runId,
+      status: run.status,
+      maxLeads,
     });
   } catch (error) {
-    console.error("Extraction error:", error);
-    const message =
-      error instanceof Error ? error.message : "Extraction failed.";
-
+    console.error("Extraction start error:", error);
     return NextResponse.json(
       {
         ok: false,
-        error:
-          message.includes("408") || /timeout/i.test(message)
-            ? "The extraction took too long. Try fewer leads or turn off email enrichment, then run again."
-            : message,
+        error: error instanceof Error ? error.message : "Extraction failed to start.",
       },
       { status: 500 }
     );

@@ -150,7 +150,9 @@ Then add the environment variables in the Vercel dashboard and redeploy.
 - If coordinates are absent, the app uses the text location.
 - With multiple keywords, the requested result limit is divided across keywords and the final result is trimmed to your total `Maximum leads`.
 - Contact enrichment uses Apify's `scrapeContacts` option.
-- `Phone` is the main Google Maps number. `Mobile` and `Landline` are only populated when the returned contact data clearly labels them; the app does not invent phone types.
+- `Phone` contains the main Google Maps phone and, when available, additional unclassified website phones (deduplicated, up to 3 values).
+- `Mobile` and `Landline` are only populated when the returned data explicitly identifies the phone type. The app deliberately does not guess mobile vs. fixed-line numbers.
+- The app starts Apify runs asynchronously and polls them. This avoids holding a single Vercel function open for the entire scrape.
 
 ## Troubleshooting
 
@@ -160,8 +162,11 @@ Share the Google Sheet with the service account's `client_email` as **Editor** a
 ### "Apify token test failed"
 Create a new Apify API token and update `APIFY_TOKEN`.
 
-### Extraction timed out
-Try fewer leads or disable contact enrichment. Vercel and Apify both have execution-duration limits for synchronous requests.
+### "Portal login is not configured"
+Add `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `AUTH_SECRET` in **Vercel → Project → Settings → Environment Variables**, apply them to Production, then redeploy.
+
+### Extraction is taking a long time
+This version starts the Apify run asynchronously and polls its status, so it is not tied to one long Vercel request. Keep the Search Leads page open until the app reports **Import completed**. Contact enrichment can still make Apify runs slower, so use a smaller batch if you need faster results.
 
 ### Location cannot be found
 Use a simpler value such as `Jubail, Saudi Arabia`, then click **Find**. You may also enter latitude/longitude manually.

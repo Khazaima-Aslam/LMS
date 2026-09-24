@@ -105,7 +105,8 @@ function rowFromLead(lead: Lead) {
 function normalize(value: string) {
   return value
     .toLowerCase()
-    .replace(/[^a-z0-9\u0600-\u06ff]+/g, " ")
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }
 
@@ -145,6 +146,7 @@ export async function syncLeadsToGoogleSheet(leads: Lead[]) {
   >();
 
   existingRows.forEach((row, index) => {
+    if (!String(row[0] || "").trim()) return;
     const key = keyForRow(row);
     if (key && !existingMap.has(key)) {
       existingMap.set(key, { rowNumber: index + 2, row });

@@ -6,6 +6,12 @@ export default async function LoginPage() {
   const session = await getSession();
   if (session) redirect("/dashboard");
 
+  const configured = Boolean(
+    process.env.ADMIN_USERNAME?.trim() &&
+      process.env.ADMIN_PASSWORD &&
+      process.env.AUTH_SECRET
+  );
+
   return (
     <main className="loginPage">
       <div className="loginCard">
@@ -16,9 +22,21 @@ export default async function LoginPage() {
             <p>Private business lead workspace</p>
           </div>
         </div>
-        <LoginForm />
+
+        {!configured ? (
+          <div className="errorBox loginConfigWarning">
+            <b>Vercel setup required.</b>
+            <div>
+              Add <code>ADMIN_USERNAME</code>, <code>ADMIN_PASSWORD</code> and{" "}
+              <code>AUTH_SECRET</code> under Vercel → Project → Settings →
+              Environment Variables, then redeploy.
+            </div>
+          </div>
+        ) : null}
+
+        <LoginForm configured={configured} />
         <p className="loginHint">
-          Your API credentials stay on the server as Vercel environment variables.
+          API credentials and login secrets stay on the server as Vercel environment variables.
         </p>
       </div>
     </main>

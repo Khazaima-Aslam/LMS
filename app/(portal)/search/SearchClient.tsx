@@ -1,9 +1,12 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 
 type Result = {
   ok: boolean;
+  done?: boolean;
+  status?: string;
+  statusMessage?: string;
   message?: string;
   error?: string;
   processed?: number;
@@ -12,6 +15,10 @@ type Result = {
   unchanged?: number;
   sheetUrl?: string;
 };
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export default function SearchClient() {
   const [keywords, setKeywords] = useState<string[]>(["industrial contractor"]);
@@ -24,7 +31,9 @@ export default function SearchClient() {
   const [enrich, setEnrich] = useState(true);
   const [finding, setFinding] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [runStatus, setRunStatus] = useState("");
   const [result, setResult] = useState<Result | null>(null);
+  const activeRunRef = useRef(0);
 
   function addKeyword() {
     const value = keyword.trim();
@@ -58,12 +67,54 @@ export default function SearchClient() {
     }
   }
 
+  async function pollRun(runId: string, limit: number, requestId: number) {
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      if (activeRunRef.current !== requestId) return;
+      await sleep(attempt === 0 ? 1200 : 3000);
+
+      const res = await fetch(
+        `/api/extract/status?runId=${encodeURIComponent(runId)}&maxLeads=${limit}`,
+        { cache: "no-store" }
+      );
+
+      const contentType = res.headers.get("content-type") || "";
+      const data = (contentType.includes("application/json")
+        ? await res.json()
+        : { ok: false, error: await res.text() }) as Result;
+
+      if (activeRunRef.current !== requestId) return;
+
+      if (!res.ok || !data.ok) {
+        setResult({ ok: false, error: data.error || "Extraction failed." });
+        return;
+      }
+
+      setRunStatus(data.statusMessage || data.status || "Running");
+
+      if (data.done) {
+        setResult(data);
+        return;
+      }
+    }
+
+    setResult({
+      ok: false,
+      error:
+        "The Apify run is still taking longer than expected. It may continue in Apify; try a smaller batch or disable contact enrichment.",
+    });
+  }
+
   async function extract(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setRunStatus("Starting Apify run...");
     setResult(null);
 
+    const requestId = activeRunRef.current + 1;
+    activeRunRef.current = requestId;
+
     try {
+      const limit = Math.max(1, Math.min(100, Number(maxLeads) || 25));
       const res = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -73,20 +124,33 @@ export default function SearchClient() {
           latitude: latitude ? Number(latitude) : undefined,
           longitude: longitude ? Number(longitude) : undefined,
           radiusKm: Number(radiusKm),
-          maxLeads: Number(maxLeads),
+          maxLeads: limit,
           enrich,
         }),
       });
 
-      const data = await res.json();
-      setResult(data);
+      const contentType = res.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await res.json()
+        : { ok: false, error: await res.text() };
+
+      if (!res.ok || !data.ok || !data.runId) {
+        throw new Error(data.error || "Extraction failed to start.");
+      }
+
+      setRunStatus(data.status || "RUNNING");
+      await pollRun(data.runId, limit, requestId);
     } catch (e) {
-      setResult({
-        ok: false,
-        error: e instanceof Error ? e.message : "Extraction failed.",
-      });
+      if (activeRunRef.current === requestId) {
+        setResult({
+          ok: false,
+          error: e instanceof Error ? e.message : "Extraction failed.",
+        });
+      }
     } finally {
-      setLoading(false);
+      if (activeRunRef.current === requestId) {
+        setLoading(false);
+      }
     }
   }
 
@@ -158,7 +222,7 @@ export default function SearchClient() {
             type="button"
             className="secondaryBtn"
             onClick={findLocation}
-            disabled={finding}
+            disabled={finding || loading}
           >
             {finding ? "Finding..." : "Find"}
           </button>
@@ -232,8 +296,11 @@ export default function SearchClient() {
 
         {loading ? (
           <div className="progressBox">
-            Apify is collecting businesses. Email enrichment can make the run
-            slower, especially for larger batches.
+            <b>{runStatus || "Working..."}</b>
+            <div>
+              Apify is collecting businesses in the background. Contact enrichment
+              can take longer for larger batches.
+            </div>
           </div>
         ) : null}
 

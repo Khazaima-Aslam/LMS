@@ -12,7 +12,7 @@ function walkForKey(
   depth = 0,
   path = ""
 ): { value: string; path: string }[] {
-  if (depth > 4 || value == null) return [];
+  if (depth > 5 || value == null) return [];
 
   if (typeof value === "string") {
     return matcher.test(path) && value.trim()
@@ -38,6 +38,29 @@ function walkForKey(
 
 function uniq(values: string[]) {
   return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
+}
+
+function normalizePhoneKey(value: string) {
+  return value.replace(/\D+/g, "");
+}
+
+function samePhone(a: string, b: string) {
+  const aa = normalizePhoneKey(a);
+  const bb = normalizePhoneKey(b);
+  if (!aa || !bb) return a.trim().toLowerCase() === b.trim().toLowerCase();
+  if (aa === bb) return true;
+  const shorter = aa.length <= bb.length ? aa : bb;
+  const longer = aa.length > bb.length ? aa : bb;
+  return shorter.length >= 7 && longer.endsWith(shorter);
+}
+
+function uniqPhones(values: string[]) {
+  const result: string[] = [];
+  for (const value of values.map((v) => v.trim()).filter(Boolean)) {
+    if (result.some((existing) => samePhone(existing, value))) continue;
+    result.push(value);
+  }
+  return result;
 }
 
 function countryName(item: Record<string, any>) {
@@ -74,27 +97,30 @@ function getPrimaryEmail(item: Record<string, any>) {
 }
 
 function phoneByLabel(item: Record<string, any>, label: RegExp) {
-  return uniq(
-    walkForKey(item, /phone|mobile|landline|whatsapp|tel/i)
-      .filter((x) => label.test(x.path))
-      .map((x) => x.value)
-  )[0] || "";
+  return (
+    uniq(
+      walkForKey(item, /phone|mobile|landline|whatsapp|tel/i)
+        .filter((x) => label.test(x.path))
+        .map((x) => x.value)
+    )[0] || ""
+  );
 }
 
 export function mapApifyItemToLead(raw: unknown): Lead {
   const item = (raw || {}) as Record<string, any>;
 
-  const mainPhone =
-    strings(item.phone)[0] ||
-    strings(item.phoneUnformatted)[0] ||
-    strings(item.telephone)[0] ||
-    "";
+  const mobile = phoneByLabel(item, /mobile|cell|whatsapp/i);
+  const landline = phoneByLabel(item, /landline|fixed/i);
 
-  let mobile = phoneByLabel(item, /mobile|cell|whatsapp/i);
-  let landline = phoneByLabel(item, /landline|fixed/i);
+  const generalPhones = uniqPhones([
+    ...strings(item.phone),
+    ...strings(item.phoneUnformatted),
+    ...strings(item.telephone),
+    ...strings(item.phones),
+    ...strings(item.additionalPhones),
+  ]);
 
-  if (mobile === mainPhone) mobile = "";
-  if (landline === mainPhone) landline = "";
+  const mainPhone = generalPhones.slice(0, 3).join("; ");
 
   return {
     businessName: String(item.title || item.name || "").trim(),
@@ -116,7 +142,7 @@ export function mapApifyItemToLead(raw: unknown): Lead {
   };
 }
 
-export async function runApifySearch(args: {
+export type ApifySearchArgs = {
   keywords: string[];
   location: string;
   latitude?: number;
@@ -124,14 +150,9 @@ export async function runApifySearch(args: {
   radiusKm: number;
   maxLeads: number;
   enrich: boolean;
-}) {
-  const token = process.env.APIFY_TOKEN;
-  const actorId =
-    process.env.APIFY_ACTOR_ID || "compass/crawler-google-places";
+};
 
-  if (!token) throw new Error("APIFY_TOKEN is not configured.");
-
-  const actorPath = actorId.replace("/", "~");
+export function buildApifyInput(args: ApifySearchArgs) {
   const perSearch = Math.max(
     1,
     Math.ceil(args.maxLeads / Math.max(1, args.keywords.length))
@@ -151,10 +172,7 @@ export async function runApifySearch(args: {
     scrapeDirectories: false,
   };
 
-  if (
-    Number.isFinite(args.latitude) &&
-    Number.isFinite(args.longitude)
-  ) {
+  if (Number.isFinite(args.latitude) && Number.isFinite(args.longitude)) {
     input.customGeolocation = {
       type: "Point",
       coordinates: [args.longitude, args.latitude],
@@ -164,24 +182,101 @@ export async function runApifySearch(args: {
     input.locationQuery = args.location.trim();
   }
 
-  const endpoint =
-    `https://api.apify.com/v2/actors/${encodeURIComponent(actorPath)}` +
-    `/run-sync-get-dataset-items?clean=true&format=json`;
+  return input;
+}
+
+function actorPath() {
+  const actorId =
+    process.env.APIFY_ACTOR_ID || "compass/crawler-google-places";
+  return actorId.replace("/", "~");
+}
+
+function apifyHeaders() {
+  const token = process.env.APIFY_TOKEN;
+  if (!token) throw new Error("APIFY_TOKEN is not configured.");
+
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+}
+
+export async function startApifySearch(args: ApifySearchArgs) {
+  const endpoint = `https://api.apify.com/v2/actors/${encodeURIComponent(
+    actorPath()
+  )}/runs`;
 
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(input),
+    headers: apifyHeaders(),
+    body: JSON.stringify(buildApifyInput(args)),
     cache: "no-store",
   });
 
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(
-      `Apify request failed (${response.status}). ${detail.slice(0, 500)}`
+      `Apify start failed (${response.status}). ${detail.slice(0, 500)}`
+    );
+  }
+
+  const json = (await response.json()) as {
+    data?: { id?: string; status?: string };
+  };
+
+  if (!json.data?.id) {
+    throw new Error("Apify did not return a run ID.");
+  }
+
+  return {
+    runId: json.data.id,
+    status: json.data.status || "READY",
+  };
+}
+
+export async function getApifyRun(runId: string) {
+  const response = await fetch(
+    `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}`,
+    {
+      headers: apifyHeaders(),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Apify status check failed (${response.status}). ${detail.slice(0, 500)}`
+    );
+  }
+
+  const json = (await response.json()) as {
+    data?: { status?: string; statusMessage?: string };
+  };
+
+  return {
+    status: json.data?.status || "UNKNOWN",
+    statusMessage: json.data?.statusMessage || "",
+  };
+}
+
+export async function getApifyRunLeads(runId: string, maxLeads: number) {
+  const endpoint =
+    `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}` +
+    `/dataset/items?clean=true&format=json&limit=${Math.max(
+      1,
+      Math.min(100, Math.round(maxLeads))
+    )}`;
+
+  const response = await fetch(endpoint, {
+    headers: apifyHeaders(),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Apify dataset fetch failed (${response.status}). ${detail.slice(0, 500)}`
     );
   }
 
@@ -189,7 +284,7 @@ export async function runApifySearch(args: {
   return items
     .map(mapApifyItemToLead)
     .filter((lead) => lead.businessName)
-    .slice(0, args.maxLeads);
+    .slice(0, maxLeads);
 }
 
 export async function testApifyConnection() {
