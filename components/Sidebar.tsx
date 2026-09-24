@@ -2,15 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ManagedRole } from "@/lib/managedUsers";
 
-const links = [
+const baseLinks = [
   { href: "/dashboard", label: "Dashboard", icon: "▦" },
   { href: "/search", label: "Search Leads", icon: "⌕" },
   { href: "/setup", label: "Setup", icon: "⚙" },
 ];
 
-export default function Sidebar() {
+const adminLinks = [
+  { href: "/admin/users", label: "User Accounts", icon: "♙" },
+];
+
+export default function Sidebar({ role }: { role: ManagedRole }) {
   const pathname = usePathname();
+  const links = role === "admin" ? [...baseLinks, ...adminLinks] : baseLinks;
 
   return (
     <aside className="sidebar">
@@ -24,7 +30,8 @@ export default function Sidebar() {
 
       <nav className="nav">
         {links.map((link) => {
-          const active = pathname === link.href;
+          const active =
+            pathname === link.href || pathname.startsWith(`${link.href}/`);
           return (
             <Link
               key={link.href}

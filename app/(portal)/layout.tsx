@@ -13,7 +13,7 @@ export default async function PortalLayout({
 
   return (
     <div className="portal">
-      <Sidebar />
+      <Sidebar role={session.role} />
       <div className="mainShell">
         <header className="topbar">
           <strong>{getAppName()}</strong>
@@ -22,7 +22,8 @@ export default async function PortalLayout({
           </span>
           <div className="topbarRight">
             <span>
-              Welcome, <b>{session.username}</b>
+              Welcome, <b>{session.displayName || session.username}</b>
+              <em className="roleBadge">{session.role}</em>
             </span>
             <form action="/api/auth/logout" method="post">
               <button className="signoutBtn">Sign out</button>
