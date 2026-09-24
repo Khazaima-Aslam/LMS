@@ -1,4 +1,4 @@
-import { ensureLeadSheet } from "@/lib/googleSheets";
+import { systemSheetsContext } from "@/lib/systemGoogle";
 import {
   MANAGED_USER_HEADERS,
   normalizeManagedRole,
@@ -30,7 +30,7 @@ function validateDisplayName(value: string, username: string) {
 }
 
 async function ensureManagedUserSheet() {
-  const { sheets, spreadsheetId } = await ensureLeadSheet();
+  const { sheets, spreadsheetId } = await systemSheetsContext();
 
   const meta = await sheets.spreadsheets.get({
     spreadsheetId,
