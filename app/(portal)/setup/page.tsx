@@ -7,10 +7,10 @@ export default function SetupPage() {
   return (
     <div className="pageStack">
       <section className="pageHeader">
-        <h1>Setup</h1>
+        <h1>System Status</h1>
         <p>
-          Verify your Apify and Google Sheets connection. Secrets are stored in
-          Vercel environment variables, not in the browser.
+          Check whether LeadFlow is ready to extract leads and write results to
+          Google Sheets.
         </p>
       </section>
       <SetupClient initial={status} />

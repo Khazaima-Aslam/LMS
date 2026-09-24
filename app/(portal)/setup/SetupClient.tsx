@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 type Status = {
+  portalConfigured: boolean;
   apifyConfigured: boolean;
   apifyActor: string;
   googleConfigured: boolean;
@@ -41,30 +42,28 @@ export default function SetupClient({ initial }: { initial: Status }) {
   return (
     <>
       <section className="panel">
-        <h2>Account setup</h2>
+        <h2>Connection status</h2>
         <p className="muted">
-          Add the values below in Vercel → Project → Settings → Environment
-          Variables, then redeploy. Do not put API keys in client-side code.
+          LeadFlow is installed. This page only shows whether the server-side
+          services required for lead extraction are connected.
         </p>
         <div className="envTable">
-          <div><b>APIFY_TOKEN</b><span>{initial.apifyConfigured ? "Configured" : "Missing"}</span></div>
-          <div><b>APIFY_ACTOR_ID</b><span>{initial.apifyActor}</span></div>
-          <div><b>GOOGLE_SPREADSHEET_ID</b><span>{initial.spreadsheetConfigured ? "Configured" : "Missing"}</span></div>
-          <div><b>GOOGLE_SERVICE_ACCOUNT_JSON_BASE64</b><span>{initial.googleConfigured ? "Configured" : "Missing"}</span></div>
-          <div><b>GOOGLE_SHEET_TAB</b><span>{initial.sheetTab}</span></div>
-          <div><b>ADMIN_USERNAME / ADMIN_PASSWORD</b><span>Portal login</span></div>
-          <div><b>AUTH_SECRET</b><span>Session signing secret</span></div>
+          <div><b>Portal access</b><span>{initial.portalConfigured ? "Ready" : "Needs setup"}</span></div>
+          <div><b>Apify lead provider</b><span>{initial.apifyConfigured ? "Connected" : "Not connected"}</span></div>
+          <div><b>Google Sheet destination</b><span>{initial.spreadsheetConfigured ? "Connected" : "Not connected"}</span></div>
+          <div><b>Google service account</b><span>{initial.googleConfigured ? "Connected" : "Not connected"}</span></div>
+          <div><b>Destination tab</b><span>{initial.sheetTab}</span></div>
         </div>
       </section>
 
       <section className="panel">
         <h2>Apify</h2>
-        <div className="kv"><span>Mode</span><b>{initial.apifyActor}</b></div>
+        <div className="kv"><span>Provider</span><b>{initial.apifyActor}</b></div>
         <div className="kv"><span>Maximum per request</span><b>100 leads</b></div>
         <div className="kv"><span>Maximum radius</span><b>50 km</b></div>
         <button
           className="primaryBtn"
-          disabled={testing === "apify"}
+          disabled={!initial.apifyConfigured || testing === "apify"}
           onClick={() => test("apify")}
         >
           {testing === "apify" ? "Testing..." : "Test Apify connection"}
@@ -75,13 +74,16 @@ export default function SetupClient({ initial }: { initial: Status }) {
       <section className="panel">
         <h2>Google Sheets</h2>
         <p className="muted">
-          Create a blank Google Sheet and share it as <b>Editor</b> with the
-          service-account email from your Google JSON key. LeadFlow will create
-          the tab and headers automatically.
+          When connected, LeadFlow creates the destination tab and headers
+          automatically and writes extracted leads directly into the Sheet.
         </p>
         <button
           className="primaryBtn"
-          disabled={testing === "google"}
+          disabled={
+            !initial.googleConfigured ||
+            !initial.spreadsheetConfigured ||
+            testing === "google"
+          }
           onClick={() => test("google")}
         >
           {testing === "google" ? "Testing..." : "Test Google Sheet connection"}
@@ -89,8 +91,22 @@ export default function SetupClient({ initial }: { initial: Status }) {
         {google ? <div className="testMessage">{google}</div> : null}
       </section>
 
+      {!initial.apifyConfigured ||
+      !initial.googleConfigured ||
+      !initial.spreadsheetConfigured ? (
+        <section className="panel setupNotice">
+          <h2>One-time server connection still required</h2>
+          <p className="muted">
+            The portal itself is working. Lead extraction needs the Apify token
+            and Google Sheets service credentials to be added securely to the
+            Vercel project once. These secrets are intentionally not entered or
+            displayed inside the browser dashboard.
+          </p>
+        </section>
+      ) : null}
+
       <section className="panel">
-        <h2>Required columns</h2>
+        <h2>Google Sheet columns</h2>
         <div className="chipRow">
           {[
             "Business Name",

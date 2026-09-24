@@ -14,6 +14,11 @@ export function getAppName() {
 
 export function configurationStatus() {
   return {
+    portalConfigured: Boolean(
+      process.env.ADMIN_USERNAME?.trim() &&
+        process.env.ADMIN_PASSWORD &&
+        process.env.AUTH_SECRET
+    ),
     apifyConfigured: Boolean(process.env.APIFY_TOKEN),
     apifyActor: process.env.APIFY_ACTOR_ID || "compass/crawler-google-places",
     googleConfigured: Boolean(

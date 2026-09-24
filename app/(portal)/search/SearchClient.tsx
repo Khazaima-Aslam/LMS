@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
+import { calculateMapBbox } from "@/lib/geocode";
 
 type Result = {
   ok: boolean;
@@ -32,6 +33,7 @@ export default function SearchClient() {
   const [finding, setFinding] = useState(false);
   const [loading, setLoading] = useState(false);
   const [runStatus, setRunStatus] = useState("");
+  const [locationMessage, setLocationMessage] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const activeRunRef = useRef(0);
 
@@ -48,6 +50,7 @@ export default function SearchClient() {
     if (!location.trim()) return;
     setFinding(true);
     setResult(null);
+    setLocationMessage("");
 
     try {
       const res = await fetch(
@@ -57,11 +60,17 @@ export default function SearchClient() {
       if (!res.ok) throw new Error(data.error || "Location not found.");
       setLatitude(String(Number(data.latitude).toFixed(6)));
       setLongitude(String(Number(data.longitude).toFixed(6)));
+      setLocationMessage(
+        data.displayName
+          ? "Map centered on " + data.displayName + "."
+          : "Map location updated."
+      );
     } catch (e) {
-      setResult({
-        ok: false,
-        error: e instanceof Error ? e.message : "Location lookup failed.",
-      });
+      setLocationMessage(
+        e instanceof Error
+          ? e.message
+          : "Location lookup failed. You can still extract using the location name."
+      );
     } finally {
       setFinding(false);
     }
@@ -160,20 +169,13 @@ export default function SearchClient() {
     const radius = Number(radiusKm);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
 
-    const latDelta = Math.max(0.02, radius / 111);
-    const lngDelta = Math.max(
-      0.02,
-      radius / (111 * Math.max(0.25, Math.cos((lat * Math.PI) / 180)))
-    );
+    const bbox = encodeURIComponent(calculateMapBbox(lat, lng, radius).join(","));
+    const marker = encodeURIComponent(String(lat) + "," + String(lng));
 
-    const bbox = [
-      lng - lngDelta,
-      lat - latDelta,
-      lng + lngDelta,
-      lat + latDelta,
-    ].join("%2C");
-
-    return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lng}`;
+    return "https://www.openstreetmap.org/export/embed.html?bbox=" +
+      bbox +
+      "&layer=mapnik&marker=" +
+      marker;
   }, [latitude, longitude, radiusKm]);
 
   return (
@@ -215,7 +217,12 @@ export default function SearchClient() {
         <div className="inlineRow">
           <input
             value={location}
-            onChange={(e) => setLocation(e.target.value)}
+            onChange={(e) => {
+              setLocation(e.target.value);
+              setLatitude("");
+              setLongitude("");
+              setLocationMessage("");
+            }}
             placeholder="e.g. Jubail, Saudi Arabia"
           />
           <button
@@ -227,6 +234,10 @@ export default function SearchClient() {
             {finding ? "Finding..." : "Find"}
           </button>
         </div>
+
+        {locationMessage ? (
+          <div className="locationMessage">{locationMessage}</div>
+        ) : null}
 
         <div className="twoCol">
           <label>
@@ -353,12 +364,14 @@ export default function SearchClient() {
             loading="lazy"
           />
         ) : (
-          <div className="mapEmpty">Enter or find coordinates to preview the area.</div>
+          <div className="mapEmpty">
+            Enter a city, area, or address and click Find to preview the search area.
+          </div>
         )}
 
         <div className="mapNote">
-          The radius is sent to Apify as a point-based custom geolocation. The
-          map is a visual preview from OpenStreetMap.
+          The marker is the search center. The selected radius is used by Apify
+          for lead extraction.
         </div>
       </section>
     </div>

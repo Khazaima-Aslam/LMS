@@ -161,7 +161,7 @@ a {
 
 .topbar {
   height: 62px;
-  background: rgba(255,255,255,.96);
+  background: #ffffff;
   border-bottom: 1px solid var(--line);
   padding: 0 28px;
   display: grid;
@@ -924,4 +924,26 @@ a {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+
+.locationMessage {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f4f8ff;
+  color: #365a87;
+  border: 1px solid #d8e6f8;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.setupNotice {
+  border-left: 4px solid #f0b429;
+}
+
+.mapEmpty {
+  text-align: center;
+  padding: 24px;
+  line-height: 1.5;
 }
