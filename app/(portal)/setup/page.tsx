@@ -1,19 +1,16 @@
-import SetupClient from "./SetupClient";
-import { configurationStatus } from "@/lib/config";
+import ConnectionsClient from "./SetupClient";
 
 export default function SetupPage() {
-  const status = configurationStatus();
-
   return (
     <div className="pageStack">
       <section className="pageHeader">
-        <h1>System Status</h1>
+        <h1>My Connections</h1>
         <p>
-          Check whether LeadFlow is ready to extract leads and write results to
-          Google Sheets.
+          Connect your own Apify account and your own Google Sheet. These
+          settings belong only to your LeadFlow account.
         </p>
       </section>
-      <SetupClient initial={status} />
+      <ConnectionsClient />
     </div>
   );
 }

@@ -1,126 +1,340 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
-type Status = {
-  portalConfigured: boolean;
+type ConnectionStatus = {
+  configured: boolean;
   apifyConfigured: boolean;
-  apifyActor: string;
   googleConfigured: boolean;
-  spreadsheetConfigured: boolean;
-  sheetTab: string;
+  googleSpreadsheetId: string;
+  googleSheetTab: string;
+  apifyActorId: string;
+  googleServiceAccountEmail?: string;
 };
 
-export default function SetupClient({ initial }: { initial: Status }) {
-  const [apify, setApify] = useState("");
-  const [google, setGoogle] = useState("");
-  const [testing, setTesting] = useState("");
+type ApiResponse = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  connection?: ConnectionStatus;
+};
 
-  async function test(kind: "apify" | "google") {
-    setTesting(kind);
-    kind === "apify" ? setApify("") : setGoogle("");
+const emptyStatus: ConnectionStatus = {
+  configured: false,
+  apifyConfigured: false,
+  googleConfigured: false,
+  googleSpreadsheetId: "",
+  googleSheetTab: "Leads",
+  apifyActorId: "compass/crawler-google-places",
+  googleServiceAccountEmail: "",
+};
+
+export default function ConnectionsClient() {
+  const [status, setStatus] = useState<ConnectionStatus>(emptyStatus);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
 
     try {
-      const res = await fetch(`/api/test/${kind}`, { method: "POST" });
-      const data = await res.json();
-      const msg = res.ok
-        ? kind === "apify"
-          ? "Apify token is valid."
-          : `Google Sheets connected. Tab: ${data.tab}. Service account: ${data.serviceAccountEmail || "configured"}`
-        : data.error || "Connection test failed.";
+      const res = await fetch("/api/connections", { cache: "no-store" });
+      const data = (await res.json()) as ApiResponse;
 
-      kind === "apify" ? setApify(msg) : setGoogle(msg);
-    } catch {
-      kind === "apify"
-        ? setApify("Connection test failed.")
-        : setGoogle("Connection test failed.");
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Could not load your connections.");
+      }
+
+      setStatus(data.connection || emptyStatus);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Could not load your connections."
+      );
     } finally {
-      setTesting("");
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    setMessage("");
+    setError("");
+
+    const form = new FormData(e.currentTarget);
+
+    try {
+      const res = await fetch("/api/connections", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apifyToken: form.get("apifyToken"),
+          apifyActorId: form.get("apifyActorId"),
+          googleSpreadsheetId: form.get("googleSpreadsheetId"),
+          googleSheetTab: form.get("googleSheetTab"),
+          googleServiceAccountJson: form.get("googleServiceAccountJson"),
+        }),
+      });
+
+      const data = (await res.json()) as ApiResponse;
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Could not save your connections.");
+      }
+
+      setStatus(data.connection || status);
+      setMessage(
+        data.message ||
+          "Your Apify and Google Sheets connections were saved successfully."
+      );
+
+      const tokenInput = e.currentTarget.elements.namedItem(
+        "apifyToken"
+      ) as HTMLInputElement | null;
+      const googleInput = e.currentTarget.elements.namedItem(
+        "googleServiceAccountJson"
+      ) as HTMLTextAreaElement | null;
+      if (tokenInput) tokenInput.value = "";
+      if (googleInput) googleInput.value = "";
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Could not save your connections."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearConnections() {
+    if (
+      !window.confirm(
+        "Remove your saved Apify and Google Sheets connections from LeadFlow?"
+      )
+    ) {
+      return;
+    }
+
+    setClearing(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const res = await fetch("/api/connections", { method: "DELETE" });
+      const data = (await res.json()) as ApiResponse;
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Could not remove connections.");
+      }
+
+      setStatus(emptyStatus);
+      setMessage("Your saved connections were removed.");
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Could not remove connections."
+      );
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  if (loading) {
+    return <section className="panel">Loading your connection settings...</section>;
   }
 
   return (
     <>
-      <section className="panel">
-        <h2>Connection status</h2>
-        <p className="muted">
-          LeadFlow is installed. This page only shows whether the server-side
-          services required for lead extraction are connected.
-        </p>
-        <div className="envTable">
-          <div><b>Portal access</b><span>{initial.portalConfigured ? "Ready" : "Needs setup"}</span></div>
-          <div><b>Apify lead provider</b><span>{initial.apifyConfigured ? "Connected" : "Not connected"}</span></div>
-          <div><b>Google Sheet destination</b><span>{initial.spreadsheetConfigured ? "Connected" : "Not connected"}</span></div>
-          <div><b>Google service account</b><span>{initial.googleConfigured ? "Connected" : "Not connected"}</span></div>
-          <div><b>Destination tab</b><span>{initial.sheetTab}</span></div>
+      <section
+        className={
+          status.configured ? "statusBanner success" : "statusBanner warning"
+        }
+      >
+        <b>
+          {status.configured
+            ? "Your lead tools are connected"
+            : "Connect your lead tools"}
+        </b>
+        <span>
+          {status.configured
+            ? "Search Leads will use your own Apify account and write only to your own Google Sheet."
+            : "Add your Apify token and Google Sheet details below. Other users have separate settings."}
+        </span>
+      </section>
+
+      <section className="connectionGrid">
+        <div className="connectionCard">
+          <div className="connectionCardTop">
+            <div>
+              <span className="eyebrow">YOUR PROVIDER</span>
+              <h2>Apify</h2>
+            </div>
+            <span
+              className={
+                status.apifyConfigured
+                  ? "connectionBadge ready"
+                  : "connectionBadge missing"
+              }
+            >
+              {status.apifyConfigured ? "Connected" : "Not connected"}
+            </span>
+          </div>
+          <p>
+            Actor: <b>{status.apifyActorId}</b>
+          </p>
+        </div>
+
+        <div className="connectionCard">
+          <div className="connectionCardTop">
+            <div>
+              <span className="eyebrow">YOUR DESTINATION</span>
+              <h2>Google Sheets</h2>
+            </div>
+            <span
+              className={
+                status.googleConfigured
+                  ? "connectionBadge ready"
+                  : "connectionBadge missing"
+              }
+            >
+              {status.googleConfigured ? "Connected" : "Not connected"}
+            </span>
+          </div>
+          <p>
+            Sheet:{" "}
+            <b>
+              {status.googleSpreadsheetId
+                ? status.googleSpreadsheetId.slice(0, 18) + "..."
+                : "Not set"}
+            </b>
+          </p>
+          {status.googleServiceAccountEmail ? (
+            <p className="muted connectionEmail">
+              {status.googleServiceAccountEmail}
+            </p>
+          ) : null}
         </div>
       </section>
 
       <section className="panel">
-        <h2>Apify</h2>
-        <div className="kv"><span>Provider</span><b>{initial.apifyActor}</b></div>
-        <div className="kv"><span>Maximum per request</span><b>100 leads</b></div>
-        <div className="kv"><span>Maximum radius</span><b>50 km</b></div>
-        <button
-          className="primaryBtn"
-          disabled={!initial.apifyConfigured || testing === "apify"}
-          onClick={() => test("apify")}
-        >
-          {testing === "apify" ? "Testing..." : "Test Apify connection"}
-        </button>
-        {apify ? <div className="testMessage">{apify}</div> : null}
-      </section>
-
-      <section className="panel">
-        <h2>Google Sheets</h2>
+        <h2>{status.configured ? "Update my connections" : "Connect my account"}</h2>
         <p className="muted">
-          When connected, LeadFlow creates the destination tab and headers
-          automatically and writes extracted leads directly into the Sheet.
+          Your secret values are encrypted before being stored. After saving,
+          LeadFlow never displays your Apify token or Google private key back
+          in the browser.
         </p>
-        <button
-          className="primaryBtn"
-          disabled={
-            !initial.googleConfigured ||
-            !initial.spreadsheetConfigured ||
-            testing === "google"
-          }
-          onClick={() => test("google")}
-        >
-          {testing === "google" ? "Testing..." : "Test Google Sheet connection"}
-        </button>
-        {google ? <div className="testMessage">{google}</div> : null}
+
+        <form className="connectionForm" onSubmit={save}>
+          <div className="connectionSection">
+            <h3>1. Apify</h3>
+            <label>
+              Apify API token
+              <input
+                name="apifyToken"
+                type="password"
+                autoComplete="off"
+                placeholder={
+                  status.apifyConfigured
+                    ? "Saved — leave blank to keep current token"
+                    : "Paste your Apify API token"
+                }
+              />
+            </label>
+
+            <label>
+              Apify Actor ID
+              <input
+                name="apifyActorId"
+                defaultValue={status.apifyActorId}
+                placeholder="compass/crawler-google-places"
+              />
+            </label>
+          </div>
+
+          <div className="connectionSection">
+            <h3>2. Google Sheet</h3>
+            <label>
+              Google Spreadsheet URL or ID
+              <input
+                name="googleSpreadsheetId"
+                defaultValue={status.googleSpreadsheetId}
+                placeholder="https://docs.google.com/spreadsheets/d/..."
+                required
+              />
+            </label>
+
+            <label>
+              Destination tab
+              <input
+                name="googleSheetTab"
+                defaultValue={status.googleSheetTab || "Leads"}
+                placeholder="Leads"
+                required
+              />
+            </label>
+
+            <label>
+              Google service-account JSON
+              <textarea
+                name="googleServiceAccountJson"
+                rows={7}
+                placeholder={
+                  status.googleConfigured
+                    ? "Saved — leave blank to keep current service-account key"
+                    : "Paste the complete service-account JSON key here"
+                }
+              />
+            </label>
+
+            <div className="infoBox">
+              Share your destination Google Sheet as <b>Editor</b> with the
+              service-account email from the JSON key. LeadFlow will create the
+              destination tab and headers automatically.
+            </div>
+          </div>
+
+          <div className="connectionActions">
+            <button className="primaryBtn" disabled={saving}>
+              {saving ? "Testing & saving..." : "Test & save my connections"}
+            </button>
+
+            {status.configured ? (
+              <button
+                className="dangerBtn"
+                type="button"
+                disabled={clearing || saving}
+                onClick={() => void clearConnections()}
+              >
+                {clearing ? "Removing..." : "Remove saved connections"}
+              </button>
+            ) : null}
+          </div>
+        </form>
+
+        {message ? <div className="testMessage">{message}</div> : null}
+        {error ? <div className="errorBox">{error}</div> : null}
       </section>
 
-      {!initial.apifyConfigured ||
-      !initial.googleConfigured ||
-      !initial.spreadsheetConfigured ? (
-        <section className="panel setupNotice">
-          <h2>One-time server connection still required</h2>
-          <p className="muted">
-            The portal itself is working. Lead extraction needs the Apify token
-            and Google Sheets service credentials to be added securely to the
-            Vercel project once. These secrets are intentionally not entered or
-            displayed inside the browser dashboard.
-          </p>
-        </section>
-      ) : null}
-
       <section className="panel">
-        <h2>Google Sheet columns</h2>
-        <div className="chipRow">
-          {[
-            "Business Name",
-            "Category",
-            "Full Address",
-            "City",
-            "Country",
-            "Mobile",
-            "Landline",
-            "Email",
-            "Phone",
-          ].map((x) => (
-            <span className="smallChip" key={x}>{x}</span>
-          ))}
+        <h2>What is private to your account?</h2>
+        <div className="privacyGrid">
+          <div>
+            <b>Your Apify token</b>
+            <span>Used only for searches started from your account.</span>
+          </div>
+          <div>
+            <b>Your Google Sheet</b>
+            <span>Your extracted leads are written to your selected Sheet.</span>
+          </div>
+          <div>
+            <b>Your Google service account</b>
+            <span>Used only server-side to access your selected Sheet.</span>
+          </div>
         </div>
       </section>
     </>

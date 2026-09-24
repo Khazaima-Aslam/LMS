@@ -1,63 +1,67 @@
-import { configurationStatus, getSpreadsheetId } from "@/lib/config";
+import { getSession } from "@/lib/auth";
+import { getUserConnectionConfig } from "@/lib/connectionStore";
 import { LEAD_HEADERS } from "@/lib/types";
+import { maskedConnectionStatus } from "@/lib/userConnections";
 
-export default function DashboardPage() {
-  const status = configurationStatus();
-  const ready =
-    status.apifyConfigured &&
-    status.googleConfigured &&
-    status.spreadsheetConfigured;
+export default async function DashboardPage() {
+  const session = await getSession();
+  const connection = session
+    ? await getUserConnectionConfig(session).catch(() => null)
+    : null;
+  const status = maskedConnectionStatus(connection);
+  const ready = status.configured;
 
   return (
     <div className="pageStack">
       <section className="pageHeader">
         <h1>LeadFlow Dashboard</h1>
         <p>
-          Search public business listings and write clean, deduplicated leads
-          directly into Google Sheets.
+          Search public business listings using your own Apify account and
+          write clean, deduplicated leads into your own Google Sheet.
         </p>
       </section>
 
-      <div className={`statusBanner ${ready ? "success" : "warning"}`}>
-        <b>{ready ? "Ready for live extraction" : "Setup required"}</b>
+      <div className={"statusBanner " + (ready ? "success" : "warning")}>
+        <b>{ready ? "Ready for live extraction" : "Connect your tools first"}</b>
         <span>
           {ready
-            ? "Apify and Google Sheets are configured."
-            : "Open Setup and complete the missing environment variables."}
+            ? "Your Apify account and Google Sheet are connected."
+            : "Open My Connections and add your own Apify and Google Sheets details."}
         </span>
       </div>
 
       <section className="statGrid">
         <div className="statCard">
-          <span>Provider</span>
-          <strong>APIFY</strong>
+          <span>Apify</span>
+          <strong>{status.apifyConfigured ? "Connected" : "Not connected"}</strong>
           <em className={status.apifyConfigured ? "ok" : "bad"}>
-            {status.apifyConfigured ? "OK" : "Missing"}
+            {status.apifyConfigured ? "YOUR ACCOUNT" : "SET UP"}
           </em>
         </div>
+
         <div className="statCard">
-          <span>Google credentials</span>
-          <strong>{status.googleConfigured ? "Configured" : "Missing"}</strong>
+          <span>Google Sheets</span>
+          <strong>{status.googleConfigured ? "Connected" : "Not connected"}</strong>
           <em className={status.googleConfigured ? "ok" : "bad"}>
-            {status.googleConfigured ? "OK" : "Check"}
+            {status.googleConfigured ? "YOUR SHEET" : "SET UP"}
           </em>
         </div>
+
         <div className="statCard">
-          <span>Destination Sheet</span>
-          <strong>{status.sheetTab}</strong>
-          <em className={status.spreadsheetConfigured ? "ok" : "bad"}>
-            {status.spreadsheetConfigured ? "OK" : "Missing"}
-          </em>
+          <span>Destination tab</span>
+          <strong>{status.googleSheetTab || "Leads"}</strong>
+          <em className={ready ? "ok" : "bad"}>{ready ? "READY" : "WAITING"}</em>
         </div>
+
         <div className="statCard">
-          <span>Enrichment</span>
-          <strong>Optional</strong>
-          <em className="ok">Available</em>
+          <span>Account isolation</span>
+          <strong>Enabled</strong>
+          <em className="ok">PRIVATE</em>
         </div>
       </section>
 
       <section className="panel">
-        <h2>Google Sheet output</h2>
+        <h2>Your Google Sheet output</h2>
         <div className="chipRow">
           {LEAD_HEADERS.map((header) => (
             <span className="smallChip" key={header}>
@@ -70,29 +74,35 @@ export default function DashboardPage() {
           address/location. Existing rows are preserved and only blank fields
           are filled.
         </p>
-        {getSpreadsheetId() ? (
+
+        {connection?.googleSpreadsheetId ? (
           <a
             className="textLink"
             target="_blank"
             rel="noreferrer"
-            href={`https://docs.google.com/spreadsheets/d/${getSpreadsheetId()}/edit`}
+            href={
+              "https://docs.google.com/spreadsheets/d/" +
+              connection.googleSpreadsheetId +
+              "/edit"
+            }
           >
-            Open destination spreadsheet ↗
+            Open my destination spreadsheet ↗
           </a>
-        ) : null}
+        ) : (
+          <a className="textLink" href="/setup">
+            Connect my Apify and Google Sheet →
+          </a>
+        )}
       </section>
 
       <section className="panel">
-        <h2>How this edition works</h2>
+        <h2>How each user works</h2>
         <ol className="steps">
-          <li>Select one or more business keywords.</li>
-          <li>Enter a city/location and optionally find its coordinates.</li>
-          <li>Choose the search radius, result limit, and email enrichment.</li>
-          <li>Apify extracts public business listings from Google Maps.</li>
-          <li>
-            LeadFlow deduplicates the results and appends or enriches rows in
-            Google Sheets.
-          </li>
+          <li>Sign in with your own LeadFlow username and password.</li>
+          <li>Open My Connections and add your own Apify + Google Sheet.</li>
+          <li>Search businesses by keyword, location, radius, and quantity.</li>
+          <li>Your Apify account performs only your searches.</li>
+          <li>Your leads are written only to your configured Google Sheet.</li>
         </ol>
       </section>
     </div>

@@ -7,7 +7,7 @@ import type { ManagedRole } from "@/lib/managedUsers";
 const baseLinks = [
   { href: "/dashboard", label: "Dashboard", icon: "▦" },
   { href: "/search", label: "Search Leads", icon: "⌕" },
-  { href: "/setup", label: "Setup", icon: "⚙" },
+  { href: "/setup", label: "My Connections", icon: "⚙" },
 ];
 
 const adminLinks = [
