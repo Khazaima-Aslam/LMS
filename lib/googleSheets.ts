@@ -1,46 +1,48 @@
 import { google } from "googleapis";
-import { getSheetTab, getSpreadsheetId } from "@/lib/config";
+import { normalizeSpreadsheetId } from "@/lib/userConnections";
 import { LEAD_HEADERS, type Lead } from "@/lib/types";
 
-function loadCredentials() {
-  const base64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64?.trim();
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
+export type UserGoogleSheetConfig = {
+  serviceAccountJson: string;
+  spreadsheetId: string;
+  tab?: string;
+};
 
-  if (!base64 && !raw) {
-    throw new Error("Google service-account credentials are not configured.");
-  }
-
+function loadCredentials(jsonValue: string) {
   try {
-    const json = base64
-      ? Buffer.from(base64, "base64").toString("utf8")
-      : raw!;
-    return JSON.parse(json);
+    const credentials = JSON.parse(String(jsonValue || ""));
+    if (!credentials?.client_email || !credentials?.private_key) {
+      throw new Error("missing fields");
+    }
+    return credentials;
   } catch {
-    throw new Error(
-      "Google service-account JSON is invalid. Use the full JSON or its Base64 value."
-    );
+    throw new Error("Your saved Google service-account JSON is invalid.");
   }
 }
 
-function sheetsClient() {
-  const credentials = loadCredentials();
+function sheetsClient(config: UserGoogleSheetConfig) {
+  const credentials = loadCredentials(config.serviceAccountJson);
   const auth = new google.auth.GoogleAuth({
     credentials,
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
-  return google.sheets({ version: "v4", auth });
+
+  return {
+    sheets: google.sheets({ version: "v4", auth }),
+    credentials,
+  };
 }
 
 function quoteSheetName(name: string) {
-  return `'${name.replace(/'/g, "''")}'`;
+  return "'" + name.replace(/'/g, "''") + "'";
 }
 
-export async function ensureLeadSheet() {
-  const spreadsheetId = getSpreadsheetId();
-  const tab = getSheetTab();
-  if (!spreadsheetId) throw new Error("GOOGLE_SPREADSHEET_ID is not configured.");
+export async function ensureLeadSheet(config: UserGoogleSheetConfig) {
+  const spreadsheetId = normalizeSpreadsheetId(config.spreadsheetId);
+  const tab = String(config.tab || "Leads").trim() || "Leads";
+  if (!spreadsheetId) throw new Error("Your Google Spreadsheet ID is missing.");
 
-  const sheets = sheetsClient();
+  const { sheets, credentials } = sheetsClient(config);
   const meta = await sheets.spreadsheets.get({
     spreadsheetId,
     fields: "sheets.properties",
@@ -59,7 +61,7 @@ export async function ensureLeadSheet() {
     });
   }
 
-  const range = `${quoteSheetName(tab)}!A1:I1`;
+  const range = quoteSheetName(tab) + "!A1:I1";
   const header = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range,
@@ -84,7 +86,7 @@ export async function ensureLeadSheet() {
     sheets,
     spreadsheetId,
     tab,
-    serviceAccountEmail: loadCredentials().client_email as string | undefined,
+    serviceAccountEmail: String(credentials.client_email || ""),
   };
 }
 
@@ -115,7 +117,7 @@ function keyForRow(row: string[]) {
   const address = normalize(row[2] || "");
   const city = normalize(row[3] || "");
   const country = normalize(row[4] || "");
-  return `${name}|${address || `${city}|${country}`}`;
+  return name + "|" + (address || city + "|" + country);
 }
 
 function mergeBlankOnly(existing: string[], incoming: string[]) {
@@ -125,9 +127,12 @@ function mergeBlankOnly(existing: string[], incoming: string[]) {
   });
 }
 
-export async function syncLeadsToGoogleSheet(leads: Lead[]) {
-  const { sheets, spreadsheetId, tab } = await ensureLeadSheet();
-  const dataRange = `${quoteSheetName(tab)}!A2:I`;
+export async function syncLeadsToGoogleSheet(
+  leads: Lead[],
+  config: UserGoogleSheetConfig
+) {
+  const { sheets, spreadsheetId, tab } = await ensureLeadSheet(config);
+  const dataRange = quoteSheetName(tab) + "!A2:I";
 
   const existingRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -169,7 +174,12 @@ export async function syncLeadsToGoogleSheet(leads: Lead[]) {
 
       if (changed) {
         updates.push({
-          range: `${quoteSheetName(tab)}!A${existing.rowNumber}:I${existing.rowNumber}`,
+          range:
+            quoteSheetName(tab) +
+            "!A" +
+            existing.rowNumber +
+            ":I" +
+            existing.rowNumber,
           values: [merged],
         });
         existing.row = merged;
@@ -201,7 +211,7 @@ export async function syncLeadsToGoogleSheet(leads: Lead[]) {
   if (newRows.length) {
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `${quoteSheetName(tab)}!A:I`,
+      range: quoteSheetName(tab) + "!A:I",
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: { values: newRows },
@@ -216,11 +226,14 @@ export async function syncLeadsToGoogleSheet(leads: Lead[]) {
   };
 }
 
-export async function testGoogleSheetConnection() {
-  const info = await ensureLeadSheet();
+export async function testGoogleSheetConnection(
+  config: UserGoogleSheetConfig
+) {
+  const info = await ensureLeadSheet(config);
   return {
     ok: true,
-    serviceAccountEmail: info.serviceAccountEmail || "",
+    serviceAccountEmail: info.serviceAccountEmail,
+    spreadsheetId: info.spreadsheetId,
     tab: info.tab,
   };
 }

@@ -1,5 +1,10 @@
 import type { Lead } from "@/lib/types";
 
+export type ApifyClientConfig = {
+  token: string;
+  actorId?: string;
+};
+
 function strings(value: unknown): string[] {
   if (typeof value === "string") return value.trim() ? [value.trim()] : [];
   if (Array.isArray(value)) return value.flatMap(strings);
@@ -22,14 +27,19 @@ function walkForKey(
 
   if (Array.isArray(value)) {
     return value.flatMap((item, i) =>
-      walkForKey(item, matcher, depth + 1, `${path}[${i}]`)
+      walkForKey(item, matcher, depth + 1, path + "[" + i + "]")
     );
   }
 
   if (typeof value === "object") {
     return Object.entries(value as Record<string, unknown>).flatMap(
       ([key, child]) =>
-        walkForKey(child, matcher, depth + 1, path ? `${path}.${key}` : key)
+        walkForKey(
+          child,
+          matcher,
+          depth + 1,
+          path ? path + "." + key : key
+        )
     );
   }
 
@@ -185,30 +195,34 @@ export function buildApifyInput(args: ApifySearchArgs) {
   return input;
 }
 
-function actorPath() {
+function actorPath(config: ApifyClientConfig) {
   const actorId =
-    process.env.APIFY_ACTOR_ID || "compass/crawler-google-places";
+    String(config.actorId || "").trim() || "compass/crawler-google-places";
   return actorId.replace("/", "~");
 }
 
-function apifyHeaders() {
-  const token = process.env.APIFY_TOKEN;
-  if (!token) throw new Error("APIFY_TOKEN is not configured.");
+function apifyHeaders(config: ApifyClientConfig) {
+  const token = String(config.token || "").trim();
+  if (!token) throw new Error("Your Apify token is not configured.");
 
   return {
-    Authorization: `Bearer ${token}`,
+    Authorization: "Bearer " + token,
     "Content-Type": "application/json",
   };
 }
 
-export async function startApifySearch(args: ApifySearchArgs) {
-  const endpoint = `https://api.apify.com/v2/actors/${encodeURIComponent(
-    actorPath()
-  )}/runs`;
+export async function startApifySearch(
+  args: ApifySearchArgs,
+  config: ApifyClientConfig
+) {
+  const endpoint =
+    "https://api.apify.com/v2/actors/" +
+    encodeURIComponent(actorPath(config)) +
+    "/runs";
 
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: apifyHeaders(),
+    headers: apifyHeaders(config),
     body: JSON.stringify(buildApifyInput(args)),
     cache: "no-store",
   });
@@ -216,7 +230,10 @@ export async function startApifySearch(args: ApifySearchArgs) {
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(
-      `Apify start failed (${response.status}). ${detail.slice(0, 500)}`
+      "Apify start failed (" +
+        response.status +
+        "). " +
+        detail.slice(0, 500)
     );
   }
 
@@ -234,11 +251,14 @@ export async function startApifySearch(args: ApifySearchArgs) {
   };
 }
 
-export async function getApifyRun(runId: string) {
+export async function getApifyRun(
+  runId: string,
+  config: ApifyClientConfig
+) {
   const response = await fetch(
-    `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}`,
+    "https://api.apify.com/v2/actor-runs/" + encodeURIComponent(runId),
     {
-      headers: apifyHeaders(),
+      headers: apifyHeaders(config),
       cache: "no-store",
     }
   );
@@ -246,7 +266,10 @@ export async function getApifyRun(runId: string) {
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(
-      `Apify status check failed (${response.status}). ${detail.slice(0, 500)}`
+      "Apify status check failed (" +
+        response.status +
+        "). " +
+        detail.slice(0, 500)
     );
   }
 
@@ -260,23 +283,29 @@ export async function getApifyRun(runId: string) {
   };
 }
 
-export async function getApifyRunLeads(runId: string, maxLeads: number) {
+export async function getApifyRunLeads(
+  runId: string,
+  maxLeads: number,
+  config: ApifyClientConfig
+) {
   const endpoint =
-    `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}` +
-    `/dataset/items?clean=true&format=json&limit=${Math.max(
-      1,
-      Math.min(100, Math.round(maxLeads))
-    )}`;
+    "https://api.apify.com/v2/actor-runs/" +
+    encodeURIComponent(runId) +
+    "/dataset/items?clean=true&format=json&limit=" +
+    Math.max(1, Math.min(100, Math.round(maxLeads)));
 
   const response = await fetch(endpoint, {
-    headers: apifyHeaders(),
+    headers: apifyHeaders(config),
     cache: "no-store",
   });
 
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(
-      `Apify dataset fetch failed (${response.status}). ${detail.slice(0, 500)}`
+      "Apify dataset fetch failed (" +
+        response.status +
+        "). " +
+        detail.slice(0, 500)
     );
   }
 
@@ -287,17 +316,16 @@ export async function getApifyRunLeads(runId: string, maxLeads: number) {
     .slice(0, maxLeads);
 }
 
-export async function testApifyConnection() {
-  const token = process.env.APIFY_TOKEN;
-  if (!token) throw new Error("APIFY_TOKEN is not configured.");
-
+export async function testApifyConnection(config: ApifyClientConfig) {
   const response = await fetch("https://api.apify.com/v2/users/me", {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: "Bearer " + String(config.token || "").trim(),
+    },
     cache: "no-store",
   });
 
   if (!response.ok) {
-    throw new Error(`Apify token test failed (${response.status}).`);
+    throw new Error("Apify token test failed (" + response.status + ").");
   }
 
   return true;
